@@ -10,6 +10,7 @@ from flask import render_template, request, redirect, url_for, flash
 from flask_login import login_user, logout_user, current_user, login_required
 from app.forms import LoginForm
 from app.models import UserProfile
+from werkzeug.security import check_password_hash
 
 
 ###
@@ -31,10 +32,21 @@ def about():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     form = LoginForm()
-    if request.method == "POST":
+        # Login and validate the user.
+    if request.method == "POST"and form.validate_on_submit():
         # change this to actually validate the entire form submission
         # and not just one field
+        username = form.username.data
+        password = form.password.data
+
         if form.username.data:
+            user = UserProfile.query.filter_by(username=username).first()
+
+            if user is not None and check_password_hash(user.password, password):
+                remember_me = False
+
+            if 'remember_me' in request.form:
+                remember_me = True
             # Get the username and password values from the form.
 
             # using your model, query database for a user based on the username
@@ -44,10 +56,16 @@ def login():
             # passed to the login_user() method below.
 
             # get user id, load into session
-            login_user(user)
+            login_user(user, remember=remember_me)
+
+            flash('Logged in successfully.', 'success')
 
             # remember to flash a message to the user
-            return redirect(url_for("home"))  # they should be redirected to a secure-page route instead
+            return redirect(url_for("/secure-page"))  # they should be redirected to a secure-page route instead
+        else:
+            flash('Username or Password is incorrect.', 'danger')
+
+    flash_errors(form)
     return render_template("login.html", form=form)
 
 
@@ -56,6 +74,16 @@ def login():
 @login_manager.user_loader
 def load_user(id):
     return UserProfile.query.get(int(id))
+
+# Flash errors from the form if validation fails with Flask-WTF
+# http://flask.pocoo.org/snippets/12/
+def flash_errors(form):
+    for field, errors in form.errors.items():
+        for error in errors:
+            flash(u"Error in the %s field - %s" % (
+                getattr(form, field).label.text,
+                error
+            ), 'danger')
 
 ###
 # The functions below should be applicable to all Flask apps.
